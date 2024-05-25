@@ -120,6 +120,7 @@ UPROGS=\
 	$U/_echo\
 	$U/_forktest\
 	$U/_grep\
+	$U/_helloworld\
 	$U/_init\
 	$U/_kill\
 	$U/_ln\
@@ -132,6 +133,9 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
+	$U/_memsize_test\
+	$U/_goodbye\
+	$U/_affinity_test\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

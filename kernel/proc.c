@@ -43,6 +43,13 @@ proc_mapstacks(pagetable_t kpgtbl)
   }
 }
 
+void set_affinity_mask(int mask)
+{
+  struct proc *p = myproc();
+  p->affinity_mask = mask;
+  p->effective_affinity_mask = mask;
+}
+
 // initialize the proc table.
 void
 procinit(void)
@@ -55,6 +62,8 @@ procinit(void)
       initlock(&p->lock, "proc");
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
+      p->affinity_mask = 0;
+      p->effective_affinity_mask = 0;
   }
 }
 
@@ -124,6 +133,8 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->affinity_mask = 0;
+  p->effective_affinity_mask = 0;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -168,6 +179,8 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->affinity_mask = 0;
+  p->effective_affinity_mask = 0;
   p->state = UNUSED;
 }
 
@@ -295,7 +308,8 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
+  np->affinity_mask = p->affinity_mask;
+  np->effective_affinity_mask = np->affinity_mask;
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -344,7 +358,7 @@ reparent(struct proc *p)
 // An exited process remains in the zombie state
 // until its parent calls wait().
 void
-exit(int status)
+exit(int status, char *msg)  //char* msg
 {
   struct proc *p = myproc();
 
@@ -376,6 +390,10 @@ exit(int status)
   acquire(&p->lock);
 
   p->xstate = status;
+  if(msg == 0) 
+    p->exit_msg = "No exit message";
+  else
+    p->exit_msg = msg;
   p->state = ZOMBIE;
 
   release(&wait_lock);
@@ -388,7 +406,7 @@ exit(int status)
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int
-wait(uint64 addr)
+wait(uint64 addr, uint64 addr_mgs) 
 {
   struct proc *pp;
   int havekids, pid;
@@ -407,6 +425,7 @@ wait(uint64 addr)
         havekids = 1;
         if(pp->state == ZOMBIE){
           // Found one.
+          copyout(p->pagetable, addr_mgs, pp->exit_msg,32);
           pid = pp->pid;
           if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
                                   sizeof(pp->xstate)) < 0) {
@@ -454,10 +473,11 @@ scheduler(void)
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
+      if(p->state == RUNNABLE && (p->effective_affinity_mask == 0 || (p->effective_affinity_mask & (1 << cpuid())) != 0)) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
+        printf("Process id: %d, CPU id: %d\n",p->pid,cpuid());
         p->state = RUNNING;
         c->proc = p;
         swtch(&c->context, &p->context);
@@ -504,6 +524,9 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
+  p->effective_affinity_mask &= ~(1 << cpuid());
+  if(p->effective_affinity_mask == 0)
+    p->effective_affinity_mask = p->affinity_mask;
   p->state = RUNNABLE;
   sched();
   release(&p->lock);

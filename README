@@ -1,4 +1,4 @@
- d s A fork of xv6 with support for devcontainer.
+A fork of xv6 with support for devcontainer.
 
 # Installation
 1. Clone the repository.

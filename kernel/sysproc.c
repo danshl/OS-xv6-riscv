@@ -10,8 +10,10 @@ uint64
 sys_exit(void)
 {
   int n;
+  char msg[32];
   argint(0, &n);
-  exit(n);
+  argstr(1,msg,sizeof(msg));
+  exit(n,msg);
   return 0;  // not reached
 }
 
@@ -31,8 +33,10 @@ uint64
 sys_wait(void)
 {
   uint64 p;
+  uint64 p_msg;
   argaddr(0, &p);
-  return wait(p);
+  argaddr(1, &p_msg);
+  return wait(p,p_msg);
 }
 
 uint64
@@ -88,4 +92,19 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_memsize(void)
+{
+  return myproc()->sz;
+}
+
+uint64
+sys_set_affinity_mask(void)
+{
+  int mask;
+  argint(0, &mask);
+  set_affinity_mask(mask);
+  return 0;  // not reached
 }
